@@ -1,0 +1,246 @@
+---
+title: "Expanding the toolkit of Salmonella transcriptomics: transcription factor activity through SalmonAct"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE)
+```
+
+# Applying the SalmonAct transcription factor activity approach to independently published *Salmonella* transcriptomics datasets
+
+Here we present SalmonAct a signed, directed prior knowledge resource for Salmonella, that can be utilised with established methods to infer transcription factor activities. SalmonAct is an extension of SalmoNet2, a multilayered interaction resource for Salmonella (Olbei et al., 2022). By combining the inferred transcription factor activities from the analysed data with the multilayered information provided by SalmoNet2, users can gain further insight into the mechanistic underpinnings of Salmonella biology.
+
+
+```{r, echo = F}
+library(tidyverse)
+library(readxl)
+library(decoupleR)
+library(ggrepel)
+library(colorspace)
+# Set the working directory
+setwd('~/Documents/Projects/salmonella_footprint/data/')
+# Read the annotation data
+
+ann <- read_tsv('d23580_annotation.tsv')
+annotation_data <- read_tsv('d23580_annotation.tsv') %>% select(`LT2 orthologue` ,`Alternate SL1344 identifier`) %>% 
+  dplyr::rename(LT2 = `LT2 orthologue`, SL1344 = `Alternate SL1344 identifier`)
+
+net <- read_tsv('salmonact.tsv') |> filter(confidenceLevel != "Weak")
+
+```
+
+## Dataset 1: ChIP-seq and transcriptome analysis of the OmpR regulon of Salmonella enterica serovars Typhi and Typhimurium reveals accessory genes implicated in host colonization
+
+Original paper: https://pubmed.ncbi.nlm.nih.gov/23190111/
+
+In this work , the authors studied the *OmpR* regulon in S. Typhi and S. Typhimurium. In the experiment they carried out transcriptional profiling of Salmonella Typhimurium SL1344 wild type and ompR mutant grown to mid-exponential phase in LB. The goal was to define the ompR-regulated genes.
+
+As this is an independent KO experiment of a prominent transcription factor, we can use the results as an independent check for our transcription factor activty estimation. Differential expression results were generated using GEO2R. 
+
+We are going to estimate transcription factor activity using decoupleR, the same way it is done in humans, except using the SalmonAct network as the input. We have filtered the interactions in SalmonAct to only keep "strong" and "confirmed" interactions (2322 in total).
+
+```{r, echo = F,warning = FALSE, message = FALSE}
+experiment <- read_tsv('~/Downloads/GSE35938.top.table.tsv')
+
+# Map IDs, extract t-values per gene
+deg <- experiment %>% left_join(annotation_data, by = c('ORF'='LT2')) %>% 
+  ungroup() %>%  
+  select(SL1344, logFC, t, P.Value) %>%
+  dplyr::rename(ID=SL1344) %>% 
+  drop_na() %>% 
+  dplyr::distinct(ID, .keep_all=TRUE) %>% 
+  column_to_rownames(var = "ID") %>%
+  as.matrix()
+
+contrast_acts <- run_ulm(mat=deg[, 't', drop=FALSE], net=net, .source='source', .target='target',
+                         .mor='mor', minsize = 5)
+contrast_acts<-contrast_acts %>% mutate(adjp = p.adjust(p_value, method =c('fdr'))) %>% dplyr::filter(adjp <= 0.05)
+
+n_tfs <- 25
+
+
+# Filter top TFs in both signs
+f_contrast_acts <- contrast_acts %>%
+  mutate(rnk = NA)
+msk <- f_contrast_acts$score > 0
+f_contrast_acts[msk, 'rnk'] <- rank(-f_contrast_acts[msk, 'score'])
+f_contrast_acts[!msk, 'rnk'] <- rank(-abs(f_contrast_acts[!msk, 'score']))
+tfs <- f_contrast_acts %>%
+  arrange(rnk) %>%
+  head(n_tfs) %>%
+  pull(source)
+f_contrast_acts <- f_contrast_acts %>%
+  filter(source %in% tfs)
+
+# Plot
+diverging <- ggplot(f_contrast_acts, aes(x = reorder(source, score), y = score)) + 
+  geom_bar(aes(fill = score), stat = "identity") +
+  scale_fill_continuous_diverging(palette='Tropic')+ 
+  coord_flip()+
+  theme_minimal() +
+  theme(axis.title = element_text(size = 12),
+        axis.text.x = 
+          element_text(angle = 45, hjust = 1, size =10),
+        axis.text.y = element_text(size =10),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) +
+  xlab("Transcription factors")+
+  ylab("Activity score")
+diverging
+
+ggsave(diverging, file='ompR_activity.svg', dpi=600, width = 8, height = 6)
+```
+
+As we can see, ompR is indeed the least active TF following its knockout.
+
+To see how the individual target genes contribute to its low score we can visualise it on the following plot. Blue labels indicate that the genes are reducing TF activity, while red signifies that they are increasing it it. This is determined by the positive or negative sign of the product of the mor ("mode of regulation"; stimualtory and inihbitory interaction) and t-value.
+
+```{r, echo=F,warning = FALSE, message = FALSE}
+tf <- 'ompR'
+gn<-read_tsv('d23580_annotation.tsv') %>% select(`Alternate SL1344 identifier`, `Gene name SL1344`) %>% dplyr::rename(locus = `Alternate SL1344 identifier`, genename= `Gene name SL1344`)
+df <- net %>% left_join(gn, by=c('target'='locus')) %>% select(-target) %>% dplyr::rename(target=genename) %>% drop_na() %>% 
+  filter(source == tf) %>%
+  arrange(target) %>%
+  mutate(ID = target, color = "3") %>%
+  column_to_rownames('target')
+
+deg2<-deg %>% as.data.frame() %>% rownames_to_column('locus') %>% left_join(gn) %>% drop_na()  %>% dplyr::distinct(genename, .keep_all=TRUE) %>% select(-locus) %>% column_to_rownames('genename') %>% as.matrix()
+
+inter <- sort(intersect(rownames(deg2),rownames(df)))
+df <- df[inter, ]
+df[,c('logfc', 't_value', 'p_value')] <- deg2[inter, ]
+df <- df %>%
+  mutate(color = if_else(mor > 0 & t_value > 0, '1', color)) %>%
+  mutate(color = if_else(mor > 0 & t_value < 0, '2', color)) %>%
+  mutate(color = if_else(mor < 0 & t_value > 0, '2', color)) %>%
+  mutate(color = if_else(mor < 0 & t_value < 0, '1', color))
+
+hild<-ggplot(df, aes(x = logfc, y = -log10(p_value), color = color, size=abs(mor))) +
+  geom_point() +
+  scale_colour_manual(values = c("#C75DAA","#009B9F","grey80")) +
+  geom_label_repel(aes(label = ID, size=1)) + 
+  theme_minimal() +
+  theme(legend.position = "none") +
+  geom_vline(xintercept = 0, linetype = 'dotted') +
+  geom_hline(yintercept = 0, linetype = 'dotted') +
+  ggtitle(tf)+
+  xlab('logFC')
+hild
+
+ggsave(hild, file = 'ompR_targets.svg', dpi=600, width = 8, height = 6)
+
+```
+
+As we can see, most of the DE ompR targets signal that the transcription factor is indeed inactive.
+
+# Dataset 2: Transcriptional profiles of Salmonella typhimurium wt, hfq and smpB mutants in four different growth conditions
+
+Original paper: https://pubmed.ncbi.nlm.nih.gov/19277208/
+
+In this experiment *Salmonella* transcription profiles were obtained from S. Typhimurium 14028S strains from multiple growth conditions. Here we look at the transcription factor activity when comparing log phase and stationary phase.
+
+The highest activity transcription factor is csgD, the "master regulator" of biofilm development. Its activity is to be expected as the cells transition from motile cells to the stationary phase, and begin biofilm formation. YncC (also known as McbR), the second-most active transcription factor similarly stimulates biofilm formation in E. coli. [PMID: 18309357]
+
+```{r, echo =F,warning = FALSE, message = FALSE}
+experiment <- read_tsv('~/Downloads/GSE11486.top.table.tsv')
+
+# Map IDs, extract t-values per gene
+deg <- experiment %>% left_join(annotation_data, by = c('PRIMARY_LT2_GENE'='LT2')) %>% 
+  ungroup() %>%  
+  select(SL1344, logFC, t, P.Value) %>%
+  dplyr::rename(ID=SL1344) %>% 
+  drop_na() %>% 
+  dplyr::distinct(ID, .keep_all=TRUE) %>% 
+  column_to_rownames(var = "ID") %>%
+  as.matrix()
+
+contrast_acts <- run_ulm(mat=deg[, 't', drop=FALSE], net=net, .source='source', .target='target',
+                         .mor='mor', minsize = 5)
+contrast_acts<-contrast_acts %>% mutate(adjp = p.adjust(p_value, method =c('fdr'))) %>% dplyr::filter(adjp <= 0.05)
+
+n_tfs <- 25
+
+
+# Filter top TFs in both signs
+f_contrast_acts <- contrast_acts %>%
+  mutate(rnk = NA)
+msk <- f_contrast_acts$score > 0
+f_contrast_acts[msk, 'rnk'] <- rank(-f_contrast_acts[msk, 'score'])
+f_contrast_acts[!msk, 'rnk'] <- rank(-abs(f_contrast_acts[!msk, 'score']))
+tfs <- f_contrast_acts %>%
+  arrange(rnk) %>%
+  head(n_tfs) %>%
+  pull(source)
+f_contrast_acts <- f_contrast_acts %>%
+  filter(source %in% tfs)
+
+# Plot
+diverging <- ggplot(f_contrast_acts, aes(x = reorder(source, score), y = score)) + 
+  geom_bar(aes(fill = score), stat = "identity") +
+  scale_fill_continuous_diverging(palette='Tropic')+ 
+  coord_flip()+
+  theme_minimal() +
+  theme(axis.title = element_text(size = 12),
+        axis.text.x = 
+          element_text(angle = 45, hjust = 1, size =10),
+        axis.text.y = element_text(size =10),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) +
+  xlab("Transcription factors")+
+  ylab("Activity score")
+diverging
+
+ggsave(diverging, file='csgd_activity.svg', dpi=600, width = 8, height = 6)
+
+```
+
+The added detail from the transcription factor activity analysis is that by analysing the collective behaviour of the target genes of individual transcription factors, we can get a better idea of how the system is behaving instead of just analysing the differential expression of single TFs. The volcano plot below highlights the top most active transcription factors in relation to DEGs, and we can see that neither of them are sign. differentially expressed.
+
+```{r, echo =F,warning = FALSE, message = FALSE}
+# volcano plot to show the exp of TFs
+
+experiment <- experiment %>%
+  mutate(gene_type = case_when(logFC >= 1.5 & adj.P.Val <= 0.05 ~ "up",
+                               logFC <= -1.5 & adj.P.Val <= 0.05 ~ "down",
+                               TRUE ~ "ns"))  
+cols <- c("up" = "coral", "down" = "lightblue", "ns" = "grey") 
+sizes <- c("up" = 2, "down" = 2, "ns" = 1) 
+alphas <- c("up" = 1, "down" = 1, "ns" = 0.5)
+
+# multiple proves match to the two TF genes, none of them are sign., selecting two to show on plot.
+experiment <- experiment %>%
+  mutate(lbl = case_when(
+    ID == '12392' ~ 'csgD',
+    ID == '2278' ~ 'yncC',
+    ID == '3849' ~ 'fis',
+    TRUE ~ as.character('')
+  ))
+
+plt<-experiment %>%
+  ggplot(aes(x = logFC,
+             y = -log10(adj.P.Val),
+             label=lbl,
+             fill = gene_type,    
+             size = gene_type,
+             alpha = gene_type)) + 
+  geom_point(shape = 21, # Specify shape and colour as fixed local parameters    
+             colour = "black") + 
+  geom_hline(yintercept = -log10(0.05),
+             linetype = "dashed") + 
+  geom_vline(xintercept = c(-1.5, 1.5),
+             linetype = "dashed") +
+  scale_fill_manual(values = cols) + # Modify point colour
+  scale_size_manual(values = sizes) + # Modify point size
+  scale_alpha_manual(values = alphas) + # Modify point transparency
+  scale_x_continuous(breaks = c(seq(-3, 3, 2)),       
+                     limits = c(-3, 3))+
+  geom_text_repel(max.overlaps = Inf, size = 6, color='red2', show.legend = F)+ 
+  labs(fill='Differential expression',size='Differential expression', alpha='Differential expression')+
+  ggthemes::theme_hc()
+
+plt
+ggsave(plt, file='volcano.svg', dpi=600, width = 8, height = 6)
+
+```
+
