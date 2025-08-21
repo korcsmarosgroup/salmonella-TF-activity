@@ -123,3 +123,11 @@ contrast_acts<-contrast_acts %>%
 19 ulm       dcuR   t          4.87 1.14e- 6 2.88e- 5
 20 ulm       crp    t         12.5  1.89e-35 1.91e-33
 ```
+
+
+References:
+--------------------
+- Perkins TT, Davies MR, Klemm EJ, Rowley G, Wileman T, James K, Keane T, Maskell D, Hinton JC, Dougan G, Kingsley RA. ChIP-seq and transcriptome analysis of the OmpR regulon of Salmonella enterica serovars Typhi and Typhimurium reveals accessory genes implicated in host colonization. Mol Microbiol. 2013 Feb;87(3):526-38. doi: 10.1111/mmi.12111. Epub 2012 Dec 19. PMID: 23190111; PMCID: PMC3586657.
+- Badia-I-Mompel P, Vélez Santiago J, Braunger J, Geiss C, Dimitrov D, Müller-Dott S, Taus P, Dugourd A, Holland CH, Ramirez Flores RO, Saez-Rodriguez J. decoupleR: ensemble of computational methods to infer biological activities from omics data. Bioinform Adv. 2022 Mar 8;2(1):vbac016. doi: 10.1093/bioadv/vbac016. PMID: 36699385; PMCID: PMC9710656.
+- Canals R, Chaudhuri RR, Steiner RE, Owen SV, Quinones-Olvera N, Gordon MA, Baym M, Ibba M, Hinton JCD. The fitness landscape of the African Salmonella Typhimurium ST313 strain D23580 reveals unique properties of the pBT1 plasmid. PLoS Pathog. 2019 Sep 27;15(9):e1007948. doi: 10.1371/journal.ppat.1007948. PMID: 31560731; PMCID: PMC6785131.
+- Müller-Dott S, Tsirvouli E, Vazquez M, Ramirez Flores RO, Badia-I-Mompel P, Fallegger R, Türei D, Lægreid A, Saez-Rodriguez J. Expanding the coverage of regulons from high-confidence prior knowledge for accurate estimation of transcription factor activities. Nucleic Acids Res. 2023 Nov 10;51(20):10934-10949. doi: 10.1093/nar/gkad841. PMID: 37843125; PMCID: PMC10639077.
