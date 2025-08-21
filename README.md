@@ -8,7 +8,7 @@ This repository contains scripts, data, and tutorials to accompany the SalmonAct
 
 ## Key Features:
 
-**SalmonAct PKN**: A curated network of signed and directed interactions involving 191 transcription factors for _Salmonella_.
+**SalmonAct PKN**: A curated network of signed and directed interactions involving 191 transcription factors for _Salmonella_. Accessible in the `data/db/` folder, named `salmonact.tsv`.
 
 **Data Compatibility**: Harmonized interaction data from databases like PRODORIC, CollecTF, RegPrecise, SalComRegulon and RegulonDB, formatted for decoupleR.
 
