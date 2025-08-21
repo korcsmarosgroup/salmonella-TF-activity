@@ -16,5 +16,5 @@ This repository contains scripts, data, and tutorials to accompany the SalmonAct
 
 **Mapping Table**: ID mapping table based on protein orthology established for SalmoNet2 to aid analysis in 20 strains
 
-For a detailed tutorial please navigate to the **tutorial** folder, or follow the steps replicating the analysis shared in the manuscript in `scripts/salmonact_notebook.Rmd`.
+For a detailed tutorial please navigate to the `tutorial` folder, or follow the steps replicating the analysis shared in the manuscript in `scripts/salmonact_notebook.Rmd`.
 
